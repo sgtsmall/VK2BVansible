@@ -1,0 +1,39 @@
+# ansible-playbook -i hosts ./playbooks/new-sdcard.yml
+---
+- hosts: local
+  vars:
+      newcard: false
+  tasks:
+      - name: check card mounted
+        stat:
+          path: /Volumes/boot
+        register: sym
+
+      - debug:
+          msg: "Path exists and is a directory"
+        when: sym.stat.isdir is defined and sym.stat.isdir
+
+      - set_fact:
+          newcard: true
+        when: sym.stat.isdir is defined and sym.stat.isdir
+
+      - debug:
+          msg: "New boot SD card exists"
+        when: newcard
+
+      - name: touch ssh
+        file:
+          path: /Volumes/boot/ssh
+          state: touch
+        when: newcard
+
+
+      - name: create wifi
+        copy:
+          src: ../files/wpa_supplicant.conf
+          dest: /Volumes/boot/wpa_supplicant.conf
+        when: newcard
+
+      - debug:
+          msg: "No New SDCard"
+        when: not newcard

@@ -1,0 +1,211 @@
+# ansible-playbook -v -i ~/ansible/hosts /playbooks/setup-camera-motion.yml
+#
+# wget http://files.js8call.com/1.0.1/js8call_1.0.1_armhf.deb
+# sudo dpkg -i js8....
+#sudo apt --fix-broken install
+#sudo dpkg -i js8...
+---
+- hosts: direwolf
+  gather_facts: yes
+  vars:
+
+    boot_config_options:
+      - regexp: "^#?dtparam=audio"
+        line: "dtparam=audio=off"
+
+    gpsd_options:
+      # Disable HDMI on startup (for power savings).
+      - regexp: "^#?DEVICES="
+        line: 'DEVICES="/dev/ttyACM0"'
+      - regexp: "^#?GPSD_OPTIONS="
+        line: 'GPSD_OPTIONS="-F /var/run/gpsd.sock"'
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+#    - include: ../tasks/update.yml
+#      tags: update
+
+    - name: Install dependancies from apt
+      become: yes
+      apt:
+        pkg:
+          - libasound2-dev
+          - git-core
+          - dnsutils
+          - gawk
+          - automake
+          - libtool
+          - libudev-dev
+          - python-dev
+          - swig
+          - libusb-1.0-0-dev
+          - texinfo
+          - gpsd
+          - libgps-dev
+          - gpsd-clients
+          - python-gps
+        state: present
+
+    # Configure boot/config.txt values
+    - name: Configure option values in /boot/config.txt file.
+      become: yes
+      lineinfile:
+        dest: /boot/config.txt
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        insertafter: EOF
+        state: present
+      with_items: "{{ boot_config_options }}"
+      notify:
+        - reboot
+        - wait for reboot to finish
+
+    # Get wiringPi library from github
+    - name: Get WiringPi library from github
+      git:
+        repo: git://git.drogon.net/wiringPi
+        dest: /home/pi/wiringPi
+
+
+    # build WiringPi
+    - name: build WiringPi
+      command: ./build
+      args:
+        chdir: "/home/pi/wiringPi"
+        creates: "/home/pi/wiringPi/gpio/gpio"
+    # Create a folder
+    - name: Creates directory
+      file: path=/home/pi/hamlibdnl state=directory
+
+    - unarchive:
+        src: https://sourceforge.net/projects/hamlib/files/hamlib/3.0.1/hamlib-3.0.1.tar.gz/download
+        dest: /home/pi/hamlibdnl
+        remote_src: True
+        creates: "/home/pi/hamlib"
+
+
+    - name: Find hamlibdnl_name
+      command: ls
+      register: hamlibdnl_name
+      args:
+        chdir: "/home/pi/hamlibdnl"
+        creates: "/home/pi/hamlib"
+
+    - debug: var=hamlibdnl_name
+
+    - name: Move hamlib download
+      shell: mv /home/pi/hamlibdnl/"{{ item }}" /home/pi/hamlib
+      with_items: "{{ hamlibdnl_name.stdout }}"
+      args:
+        creates: "/home/pi/hamlib"
+
+
+    # configure hamlib
+    - name: configure hamlib
+      become: yes
+      command: ./configure --with-xml-support --with-python-binding
+      args:
+        chdir: "/home/pi/hamlib"
+        creates: "/home/pi/hamlib/Makefile"
+    # make hamlib
+    - name: make hamlib
+      become: yes
+      command: make
+      args:
+        chdir: "/home/pi/hamlib"
+        creates: "/home/pi/hamlib/libtool"
+    # make install hamlib
+    - name: make install hamlib
+      become: yes
+      command: make install
+      notify:
+        - reboot
+        - wait for reboot to finish
+      args:
+        chdir: "/home/pi/hamlib"
+        creates: "/usr/local/bin/rigctl"
+
+    # Get Direwolf from github
+    - name: Get Direwolf from github
+      git:
+        repo: https://www.github.com/wb2osz/direwolf
+        dest: /home/pi/direwolf
+        force: yes
+
+    # make Direwolf
+    - name: make DireWolf
+      command: make
+      args:
+        chdir: "/home/pi/direwolf"
+        creates: "/home/pi/direwolf/direwolf"
+    # make install DireWolf
+    - name: make install DireWolf
+      become: yes
+      command: make install
+      args:
+        chdir: "/home/pi/direwolf"
+        creates: "/usr/local/bin/direwolf"
+
+    # make install DireWolf local
+    - name: make install DireWolf Local
+      command: make install-conf
+      args:
+        chdir: "/home/pi/direwolf"
+        creates: /home/pi/direwolf.conf
+
+    - name: create an origconf
+      shell: mv direwolf.conf direwolf.origconf
+      args:
+        creates: /home/pi/direwolf.origconf
+
+    # Create a folder
+    - name: Creates directory
+      file: path=/home/pi/Desktop state=directory
+
+
+    # make install DireWolf
+    - name: make install DireWolf rpi
+      command: make install-rpi
+      args:
+        chdir: "/home/pi/direwolf"
+        creates: "/home/pi/Desktop/direwolf.desktop"
+
+    # Get Direwolf from github
+    - name: Get DirewolfVK2BV from github
+      git:
+        repo: https://github.com/sgtsmall/VK2BV_Direwolf.git
+        dest: /home/pi/VK2BV_Direwolf
+
+    # make Direwolf
+    - name: make DireWolfVK2BV
+      command: make
+      args:
+        chdir: "/home/pi/VK2BV_Direwolf"
+        creates: "/home/pi/VK2BV_Direwolf/diretail.desktop"
+
+    # make install DireWolf
+    - name: make install DireWolfVK2BV
+      become: yes
+      command: make install
+      args:
+        chdir: "/home/pi/VK2BV_Direwolf"
+        creates: "/etc/init.d/direwolf"
+
+    - name: Configure options in /etc/default/gpsd
+      become: yes
+      lineinfile:
+        dest: /etc/default/gpsd
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        insertafter: EOF
+        state: present
+      with_items: "{{ gpsd_options }}"
+      notify:
+        - reboot
+        - wait for reboot to finish
+
+  handlers:
+
+    - include: ../handlers/reboot.yml
+      tags: system

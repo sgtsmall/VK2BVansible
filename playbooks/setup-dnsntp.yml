@@ -1,0 +1,163 @@
+# ansible-playbook -v -i ~/ansible/hosts /playbooks/setup-datalog.yml
+---
+- hosts:                  dnsntp
+  gather_facts:           yes
+  vars:
+
+    boot_config_options:
+#      - regexp:          "^#?dtparam=audio"
+#        line:            "dtparam=audio=off"
+#      - regexp:          "^#?dtparam=spi=on"
+#        line:            "dtparam=spi=on"
+
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+#    - include:           ../tasks/update.yml
+#      tags:              update
+
+     - name:              Install dependancies from apt
+       become:            yes
+       apt:
+         pkg:
+          - git-core
+          - dnsutils
+          - gawk
+          - automake
+          - libtool
+          - p7zip-full
+          - libgps-dev
+          - gpsd-clients
+          - python-gps
+          - python-dev
+          - pps-tools
+          - chrony
+          - dnsmasq
+          - scons
+         state:           present
+
+     - name:              Remove bloatware from apt
+       become:            yes
+       apt:
+         pkg:
+             - wolfram-engine
+             - libreoffice*
+         state:           absent
+
+
+    # Configure boot/config.txt values
+#    - name:              Configure option values in /boot/config.txt file.
+#      become:            yes
+#      lineinfile:
+#        dest:            /boot/config.txt
+#        regexp:          "{{ item.regexp }}"
+#        line:            "{{ item.line }}"
+#        insertafter:     EOF
+#        state:           present
+#      with_items:        "{{ boot_config_options }}"
+#      notify:
+#        - reboot
+#        - wait for reboot to finish
+
+     - name:              unarchive gpsd
+       unarchive:
+         src:             http://download-mirror.savannah.gnu.org/releases/gpsd/gpsd-3.20.tar.gz
+         dest:            /tmp
+         remote_src:      True
+         creates:         "/home/pi/gpsd"
+#  when:                  flxmlrpc_check_ver.rc == 1
+     - name:              Find gpsd
+       command:           ls -d gpsd-3.20
+       register:          gpsddnl_name
+       args:
+         chdir:           "/tmp"
+         creates:         "/home/pi/gpsd"
+#      when:              flxmlrpc_check_ver.rc == 1
+
+     - name:              Move gpsd download
+       command:           mv /tmp/"{{ item }}" /home/pi/gpsd
+       with_items:        "{{ gpsddnl_name.stdout }}"
+       args:
+         creates:         "/home/pi/gpsd"
+#     when:               flxmlrpc_check_ver.rc == 1
+
+
+     - name:              scons gpsd
+#       become:           yes
+       command:           scons
+       args:
+         chdir:           "/home/pi/gpsd"
+         creates:         "/home/pi/gpsd/gpsd"
+
+     - name:              scons gpsd check
+#       become:           yes
+       command:           scons check
+       args:
+         chdir:           "/home/pi/gpsd"
+         creates:         "/usr/local/sbin/gpsd"
+
+     - name:              scons gpsd install
+       become:            yes
+       command:           scons install
+       args:
+         chdir:           "/home/pi/gpsd"
+         creates:         "/usr/local/sbin/gpsd"
+
+     - name:              scons gpsd udev-install
+       become:            yes
+       command:           scons udev-install
+       args:
+         chdir:           "/home/pi/gpsd"
+         creates:         "/lib/udev/rules.d/25-gpsd.rules"
+       notify:            reboot
+
+     - name:              create gpsd conf
+       become:            yes
+       copy:
+         src:             ../files/gpsd
+         dest:            /etc/default/gpsd
+         mode:           0644
+
+
+     - name:              create chrony conf
+       become:            yes
+       copy:
+         src:             ../files/chrony.conf
+         dest:            /etc/chrony/chrony.conf
+         mode:           0644
+
+#gpsd is not a proper service
+# need to umask gpsd and gpsd.socket
+
+#     - name:              enable gpsd
+#       systemd:
+#         enabled:         yes
+#         masked:          no
+#         name:            gpsd
+#         scope:           system
+
+#     - name:              start gpsd
+#       systemd:
+#         state:           started
+#         name:            gpsd
+#         scope:           system
+
+#     - name:              enable chrony
+#       systemd:
+#         enabled:         yes
+#         masked:          no
+#         name:            chrony
+#         scope:           system
+
+#     - name:              start chrony
+#       systemd:
+#         state:           started
+#         name:            chrony
+#         scope:           system
+
+
+  handlers:
+
+      - include:          ../handlers/rebootnewhost.yml
+        tags:             system

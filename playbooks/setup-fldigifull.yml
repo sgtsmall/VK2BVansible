@@ -1,0 +1,612 @@
+# ansible-playbook -v -i ~/ansible/hosts /playbooks/setup-fldigifull.yml
+---
+- hosts: fldigi
+  gather_facts: yes
+  vars:
+
+    path_to_fpac: /usr/local/bin/fpac
+    fpac_target_version: "1.1"
+    path_to_direwolf: /usr/local/bin/direwolfx
+    direwolf_target_version: "1.7"
+
+    boot_config_options:
+      - regexp: "^#?dtparam=audio"
+        line: "dtparam=audio=off"
+#    aptitude_config_options:
+#      - regexp: "^#?deb-src"
+#        line: "^deb-src"
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+#    - include: ../tasks/update.yml
+#      tags: update
+#    - name: ['git-core', 'dnsutils', 'gawk', 'automake', 'libtool', 'libudev-dev', 'swig',
+# 'libfltk1.3-dev', 'libjpeg9-dev', 'libxft-dev', 'libxinerama-dev', 'libxcursor-dev',
+# 'libsndfile1-dev', 'libsamplerate0-dev', 'portaudio19-dev', 'libpulse-dev']
+    - name: Install dependancies from apt
+      become: yes
+      apt:
+        pkg:
+          - aptitude
+          - git-core
+          - dnsutils
+          - gawk
+          - automake
+          - libtool
+          - libudev-dev
+          - swig
+          - libfltk1.3-dev
+          - libjpeg9-dev
+          - libxft-dev
+          - libxinerama-dev
+          - libxcursor-dev
+          - libsndfile1-dev
+          - libsamplerate0-dev
+          - portaudio19-dev
+          - libpulse-dev
+          - pulseaudio
+          - pulseaudio-utils
+          - pulseaudio-module-zeroconf
+          - alsa-utils
+          - avahi-daemon
+          - gpsd
+          - libgps-dev
+          - gpsd-clients
+          - python-gps
+          - xastir
+          - ax25-apps
+          - ax25-tools
+          - libax25-dev
+          - subversion
+          - libncurses5-dev
+          - libncursesw5-dev
+        state: present
+
+
+
+    - name: Remove bloatware from apt
+      become: yes
+      apt:
+        pkg:
+         - wolfram-engine
+         - libreoffice*
+        state: absent
+
+
+    # Configure boot/config.txt values
+    - name: Configure option values in /boot/config.txt file.
+      become: yes
+      lineinfile:
+        dest: /boot/config.txt
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        insertafter: EOF
+        state: present
+      with_items: "{{ boot_config_options }}"
+      notify:
+        - reboot
+
+    - name: Check if wiringpi is installed
+      command: dpkg-query -W wiringpi
+      register: wiringpi_check_deb
+      failed_when: wiringpi_check_deb.rc > 1
+      changed_when: wiringpi_check_deb.rc == 1
+
+    # Get wiringPi library from github
+    - name: Get WiringPi library from drogon
+      apt:
+        deb: https://project-downloads.drogon.net/wiringpi-latest.deb
+        state: present
+      become: true
+      register: apt_output
+      when: wiringpi_check_deb.rc == 1
+
+
+#    # build WiringPi
+#    - name: build WiringPi
+#      command: ./build
+#      args:
+#        chdir: "/home/pi/wiringPi"
+#        creates: "/home/pi/wiringPi/gpio/gpio"
+
+    # flxmlrpc
+    # Create a folder
+    - name: Check if flxmlrpc is installed
+      command: grep Version /home/pi/flxmlrpc/flxmlrpc.pc
+      register: flxmlrpc_check_ver
+      failed_when: flxmlrpc_check_ver.rc > 1
+      changed_when: flxmlrpc_check_ver.rc == 1
+
+    - name: Folder flxmlrpcdnl
+      file: path=/home/pi/flxmlrpcdnl state=directory
+      when: flxmlrpc_check_ver.rc == 1
+
+    - name: unarchive flxmlrpcdnl
+      unarchive:
+        src: https://sourceforge.net/projects/fldigi/files/flxmlrpc/flxmlrpc-0.1.4.tar.gz/download
+        dest: /home/pi/flxmlrpcdnl
+        remote_src: True
+        creates: "/home/pi/flxmlrpc"
+      when: flxmlrpc_check_ver.rc == 1
+
+
+    - name: Find flxmlrpcdnl_name
+      command: ls
+      register: flxmlrpcdnl_name
+      args:
+        chdir: "/home/pi/flxmlrpcdnl"
+        creates: "/home/pi/flxmlrpc"
+      when: flxmlrpc_check_ver.rc == 1
+
+    - debug: var=flxmlrpcdnl_name
+
+    - name: Move flxmlrpc download
+      command: mv /home/pi/flxmlrpcdnl/"{{ item }}" /home/pi/flxmlrpc
+      with_items: "{{ flxmlrpcdnl_name.stdout }}"
+      args:
+        creates: "/home/pi/flxmlrpc"
+      when: flxmlrpc_check_ver.rc == 1
+
+    # configure flxmlrpc
+    - name: configure flxmlrpc
+  #    become: yes
+      command: ./configure --prefix=/usr/local --enable-static
+      args:
+        chdir: "/home/pi/flxmlrpc"
+        creates: "/home/pi/flxmlrpc/Makefile"
+      when: flxmlrpc_check_ver.rc == 1
+
+    - name: make flxmlrpc
+      make:
+        chdir: /home/pi/flxmlrpc
+        target: all
+        params:
+          CXXFLAGS: '-O2 -march=native -mtune=native'
+          CFLAGS: '-O2 -march=native -mtune=native'
+      when: flxmlrpc_check_ver.rc == 1
+
+    #  creates: "/home/pi/flxmlrpc/libtool"
+    - name: make install flxmlrpc
+      become: yes
+      make:
+        chdir: /home/pi/flxmlrpc
+        target: install
+      when: flxmlrpc_check_ver.rc == 1
+    # make install flxmlrpc
+#    - make:
+#        chdir: /home/pi/flxmlrpc
+#        target: install
+#        become: yes
+
+    - name: ldconfig
+      become: yes
+      command: ldconfig
+      args:
+         chdir: "/home/pi/flxmlrpc"
+      # End flxmlrpc
+
+
+
+
+
+    # Hamlib
+    - name: Check if hamlib is installed
+      command: rigctl --version
+      register: rigctl_check_ver
+      failed_when: rigctl_check_ver.rc > 1
+      changed_when: rigctl_check_ver.rc == 1
+
+    # Create a folder
+    - name: Folder hamlibdnl
+      file: path=/home/pi/hamlibdnl state=directory
+      when: rigctl_check_ver.rc == 1
+
+    - name: unarchive hamlibdnl
+      unarchive:
+        src: https://sourceforge.net/projects/hamlib/files/hamlib/3.3/hamlib-3.3.tar.gz/download
+        dest: /home/pi/hamlibdnl
+        remote_src: True
+        creates: "/home/pi/hamlib"
+      when: rigctl_check_ver.rc == 1
+
+
+    - name: Find hamlibdnl_name
+      command: ls
+      register: hamlibdnl_name
+      args:
+        chdir: "/home/pi/hamlibdnl"
+        creates: "/home/pi/hamlib"
+      when: rigctl_check_ver.rc == 1
+
+    - debug: var=hamlibdnl_name
+
+    - name: Move hamlib download
+      command: mv /home/pi/hamlibdnl/"{{ item }}" /home/pi/hamlib
+      with_items: "{{ hamlibdnl_name.stdout }}"
+      args:
+        creates: "/home/pi/hamlib"
+      when: rigctl_check_ver.rc == 1
+
+
+    # configure hamlib
+    - name: configure hamlib
+#      become: yes
+      command: ./configure --with-xml-support --with-python-binding
+      args:
+        chdir: "/home/pi/hamlib"
+        creates: "/home/pi/hamlib/Makefile"
+      when: rigctl_check_ver.rc == 1
+
+    # make hamlib
+    - name: make hamlib
+      make:
+        chdir: /home/pi/hamlib
+        target: all
+        params:
+          CXXFLAGS: '-O2 -march=native -mtune=native'
+          CFLAGS: '-O2 -march=native -mtune=native'
+      when: rigctl_check_ver.rc == 1
+
+
+    # make install hamlib
+    - name: make install hamlib
+      become: yes
+      make:
+        chdir: /home/pi/hamlib
+        target: install
+      when: rigctl_check_ver.rc == 1
+
+  # End Hamlib
+
+    - name: Check if fldigi is installed
+      command: fldigi --version
+      register: fldigi_check_ver
+      failed_when: fldigi_check_ver.rc > 1
+      changed_when: fldigi_check_ver.rc == 1
+
+    # fldigi
+    # Create a folder
+    - name: Folder fldigidnl
+      file: path=/home/pi/fldigidnl state=directory
+      when: fldigi_check_ver.rc == 1
+
+    - name: unarchive fldigi
+      unarchive:
+        src: https://sourceforge.net/projects/fldigi/files/fldigi/fldigi-4.1.07.tar.gz/download
+        dest: /home/pi/fldigidnl
+        remote_src: True
+        creates: "/home/pi/fldigi"
+      when: fldigi_check_ver.rc == 1
+
+
+    - name: Find fldigidnl_name
+      command: ls
+      register: fldigidnl_name
+      args:
+        chdir: "/home/pi/fldigidnl"
+        creates: "/home/pi/fldigi"
+      when: fldigi_check_ver.rc == 1
+
+    - debug: var=fldigidnl_name
+
+    - name: Move fldigi download
+      command: mv /home/pi/fldigidnl/"{{ item }}" /home/pi/fldigi
+      with_items: "{{ fldigidnl_name.stdout }}"
+      args:
+        creates: "/home/pi/fldigi"
+      when: fldigi_check_ver.rc == 1
+
+
+    # configure fldigi
+    - name: configure fldigi
+      command: ./configure --with-xml-support --with-python-binding
+      args:
+        chdir: "/home/pi/fldigi"
+        creates: "/home/pi/fldigi/Makefile"
+      when: fldigi_check_ver.rc == 1
+
+    # make fldigi
+    - name: make fldigi
+      make:
+        chdir: /home/pi/fldigi
+        target: all
+        params:
+          CXXFLAGS: '-O2 -march=native -mtune=native'
+          CFLAGS: '-O2 -march=native -mtune=native'
+      when: fldigi_check_ver.rc == 1
+
+    # make install fldigi
+    - name: make install fldigi
+      become: yes
+      make:
+        chdir: /home/pi/fldigi
+        target: install
+      when: fldigi_check_ver.rc == 1
+
+  # End fldigi
+
+    # flrig
+    - name: Check if flrig is installed
+      command: flrig --version
+      register: flrig_check_ver
+      failed_when: flrig_check_ver.rc > 1
+      changed_when: flrig_check_ver.rc == 1
+
+
+    # Create a folder
+    - name: Folder flrigdnl
+      file: path=/home/pi/flrigdnl state=directory
+      when: flrig_check_ver.rc == 1
+
+    - name: unarchive flrigdnl
+      unarchive:
+        src: https://sourceforge.net/projects/fldigi/files/flrig/flrig-1.3.47.tar.gz/download
+        dest: /home/pi/flrigdnl
+        remote_src: True
+        creates: "/home/pi/flrig"
+      when: flrig_check_ver.rc == 1
+
+
+    - name: Find flrigdnl_name
+      command: ls
+      register: flrigdnl_name
+      args:
+        chdir: "/home/pi/flrigdnl"
+        creates: "/home/pi/flrig"
+      when: flrig_check_ver.rc == 1
+
+    - debug: var=flrigdnl_name
+
+    - name: Move flrig download
+      command: mv /home/pi/flrigdnl/"{{ item }}" /home/pi/flrig
+      with_items: "{{ flrigdnl_name.stdout }}"
+      args:
+        creates: "/home/pi/flrig"
+      when: flrig_check_ver.rc == 1
+
+
+    # configure flrig
+    - name: configure flrig
+ #     become: yes
+      command: ./configure --with-xml-support --with-python-binding
+      args:
+        chdir: "/home/pi/flrig"
+        creates: "/home/pi/flrig/Makefile"
+      when: flrig_check_ver.rc == 1
+    # make flrig
+
+    - name: make flrig
+      make:
+        chdir: /home/pi/flrig
+        target: all
+        params:
+          CXXFLAGS: '-O2 -march=native -mtune=native'
+          CFLAGS: '-O2 -march=native -mtune=native'
+      when: flrig_check_ver.rc == 1
+
+  #    become: yes
+ #     command: make
+ #     args:
+ #       chdir: "/home/pi/flrig"
+ #       creates: "/home/pi/flrig/libtool"
+    # make install flrig
+    - name: make install flrig
+      become: yes
+      make:
+        chdir: /home/pi/flrig
+        target: install
+      when: flrig_check_ver.rc == 1
+  # End flrig
+
+    - name: Check if direwolf is installed
+      command: direwolf -t0 -u
+#      stat:
+#        path: "{{ path_to_direwolf }}"
+      register: direwolf_check_ver
+      failed_when: direwolf_check_ver.rc > 1
+      changed_when: direwolf_check_ver.rc == 1
+
+#      register: result_path
+
+#    - name: Check direwolf version
+#      command: "{{ path_to_direwolf }} -t 0 -u | grep version | grep -o {{ direwolf_target_version }}"
+#      register: direwolf_check_ver
+#      when: "result_path.stat.exists"
+#      failed_when: direwolf_check_ver.rc > 1
+#      changed_when: direwolf_check_ver.rc == 1
+
+
+    - debug: var=direwolf_check_ver
+    # Get Direwolf from github
+    - name: Get Direwolf from github
+      git:
+        repo: https://www.github.com/wb2osz/direwolf
+        dest: /home/pi/direwolf
+        version: dev
+        force: yes
+      when: direwolf_check_ver.rc == 1
+
+    # make Direwolf
+    - name: make DireWolf
+      make:
+       chdir: /home/pi/direwolf
+       target: all
+      when: direwolf_check_ver.rc == 1
+
+#       params:
+#         CXXFLAGS: '-O2 -march=armv8-a -mtune=cortex-a53'
+#         CFLAGS: '-O2 -march=armv8-a -mtune=cortex-a53'
+
+    # make install DireWolf
+    - name: make install DireWolf
+      become: yes
+      make:
+        chdir: /home/pi/direwolf
+        target: install
+      when: direwolf_check_ver.rc == 1
+
+    # make install DireWolf local
+    - name: make install DireWolf Local
+#      command: make install-conf
+      make:
+        chdir: /home/pi/direwolf
+        target: install-conf
+      when: direwolf_check_ver.rc == 1
+
+    - name: create an origconf
+      command: mv direwolf.conf direwolf.origconf
+      args:
+        creates: /home/pi/direwolf.origconf
+      when: direwolf_check_ver.rc == 1
+
+    # Create a folder
+    - name: Creates directory
+      file: path=/home/pi/Desktop state=directory
+      when: direwolf_check_ver.rc == 1
+
+
+    # make install DireWolf
+    - name: make install DireWolf rpi
+      make:
+        chdir: "/home/pi/direwolf"
+        target: install-rpi
+      when: direwolf_check_ver.rc == 1
+
+#        creates: "/home/pi/Desktop/direwolf.desktop"
+
+    # Get Direwolf from github
+#    - name: Get Direwolf from github
+#      git:
+#        repo: https://github.com/sgtsmall/VK2BV_Direwolf.git
+#        dest: /home/pi/VK2BV_Direwolf
+
+    # make Direwolf
+#    - name: make DireWolfVK2BV
+#      command: make
+#      args:
+#        chdir: "/home/pi/VK2BV_Direwolf"
+#        creates: "/home/pi/VK2BV_Direwolf/diretail.desktop"
+
+    # make install DireWolf
+#    - name: make install DireWolfVK2BV
+#      become: yes
+#      command: make install
+#      args:
+#        chdir: "/home/pi/VK2BV_Direwolf"
+#        creates: "/etc/init.d/direwolf"
+
+#    - name: Check if fpac is installed
+#      stat:
+#        path: "{{ path_to_fpac }}"
+#      register: result_path#
+
+#    - name: Check fpac version
+#      command: "{{ path_to_fpac }} -t 0 -u | grep version|grep {{ fpac_target_version }}"
+#      register: fpac_check_ver
+#      when: "result_path.exists"
+#      failed_when: False
+#      changed_when: False
+
+    - name: Check if fpac is installed
+      command: dpkg-query -W fpac
+      register: fpac_check_ver
+      failed_when: fpac_check_ver.rc > 1
+      changed_when: fpac_check_ver.rc == 1
+
+# Get fpac from github
+    - name: Get fpac from github
+      git:
+        repo: https://www.github.com/ve7fet/fpac
+        dest: /home/pi/fpac
+        version: master
+        force: yes
+      when: fpac_check_ver.rc == 1
+
+# autoconf fpac
+    - name: autoconf flpac
+      command: ./autogen.sh
+      args:
+        chdir: "/home/pi/fpac"
+        creates: "/home/pi/fpac/configure"
+      when: fpac_check_ver.rc == 1
+
+# configure fpac
+    - name: configure flpac
+      command: ./configure
+      args:
+        chdir: "/home/pi/fpac"
+        creates: "/home/pi/fpac/Makefile"
+      when: fpac_check_ver.rc == 1
+
+# make fpac
+    - name: make fpac
+      make:
+        chdir: /home/pi/fpac
+        target: all
+      when: fpac_check_ver.rc == 1
+
+#       params:
+#         CXXFLAGS: '-O2 -march=armv8-a -mtune=cortex-a53'
+#         CFLAGS: '-O2 -march=armv8-a -mtune=cortex-a53'
+
+# make install fpac
+    - name: make install fpac
+      become: yes
+      make:
+        chdir: /home/pi/fpac
+        target: install
+      when: fpac_check_ver.rc == 1
+
+# make install fpac local
+    - name: make installcheck fpac Local
+#      command: make install-conf
+      make:
+        chdir: /home/pi/fpac
+        target: installcheck
+      when: fpac_check_ver.rc == 1
+
+
+    - name: Check if js8call is installed
+      command: dpkg-query -W js8call
+      register: js8call_check_deb
+      failed_when: js8call_check_deb.rc > 1
+      changed_when: js8call_check_deb.rc == 1
+
+    - name: Download js8call
+      get_url:
+        url: http://files.js8call.com/1.1.0/js8call_1.1.0_armhf.deb
+        dest: /home/{{ ansible_env.USER }}/Downloads/js8call_1.1.0_armhf.deb
+      when: js8call_check_deb.rc == 1
+
+    - name: Install js8call
+      apt:
+        deb: /home/{{ ansible_env.USER }}/Downloads/js8call_1.1.0_armhf.deb
+      become: yes
+      when: js8call_check_deb.rc == 1
+
+
+    - name: Check if wsjtx is installed
+      command: dpkg-query -W wsjtx
+      register: wsjtx_check_deb
+      failed_when: wsjtx_check_deb.rc > 1
+      changed_when: wsjtx_check_deb.rc == 1
+
+    - name: Download wsjtx
+      get_url:
+        url: https://physics.princeton.edu/pulsar/k1jt/wsjtx_2.1.0_armhf.deb
+        dest: /home/{{ ansible_env.USER }}/Downloads/wsjtx_2.1.0_armhf.deb
+        validate_certs: no
+      when: wsjtx_check_deb.rc == 1
+
+    - name: Install wsjtx
+      apt:
+        deb: /home/{{ ansible_env.USER }}/Downloads/wsjtx_2.1.0_armhf.deb
+      become: yes
+      when: wsjtx_check_deb.rc == 1
+
+
+  handlers:
+
+    - include: ../handlers/reboot.yml
+      tags: system

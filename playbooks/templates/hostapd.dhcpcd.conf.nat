@@ -1,0 +1,3 @@
+interface {{ interface }}
+  static ip_address={{ ip_server }}/24
+  nohook wpa_suuplicant

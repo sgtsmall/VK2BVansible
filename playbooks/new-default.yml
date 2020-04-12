@@ -1,0 +1,68 @@
+# ansible-playbook -i ~/ansible/hosts playbooks/new-default.yml
+---
+- name: Check if raspberrypi is online
+  hosts: newpi
+  gather_facts: yes
+  vars:
+    wifi_country: "AU"
+    locale: "en_AU.UTF-8"
+    keyboard: "pc104"
+    keyboard_layout: "us"
+    timezone: Australia/Sydney
+    locale_options:
+      # Disable Default (GB) Locale
+      - regexp: "^#?en_GB.UTF-8 UTF-8"
+        line: "# en_GB.UTF-8 UTF-8"
+      # Enable AU Locale
+      - regexp: "^#?en_AU.UTF-8 UTF-8"
+        line: "en_AU.UTF-8 UTF-8"
+
+  tasks:
+
+    - name: Debug the hostname
+      debug:
+        var: hostname
+
+      # Expand the filesystem
+    - include: ../tasks/expand-filesystem.yml
+      tags: setup
+
+      # Set Internationalization Options
+    - include: ../tasks/internationalization.yml
+      tags: setup
+
+    - name: Create SSH folder
+      file: path=~/.ssh state=directory
+
+    - name: Set up SSH Key from a template
+      template: src=../../.ssh/authorized_keys dest=~/.ssh/authorized_keys
+
+    - name: run 'dpkg --configure -a'
+      become: yes
+      command: dpkg --configure -a
+
+      # Run apt-get update and apt-get upgrade
+    - include: ../tasks/update.yml
+      tags: update
+
+      # get rid of Piwiz at startup
+    - name: remove piwiz
+      file: /etc/xdg/autostart/piwiz.desktop
+      state: absent
+
+
+
+      # Set the hostname
+    - include: ../tasks/hostname.yml
+      tags: setup
+      notify:
+      - reboot
+      - Wait for server to restart
+
+  handlers:
+
+    - include: ../handlers/rebootnewhost.yml
+      tags: system
+
+    - include: ../handlers/tzdata.yml
+      tags: system

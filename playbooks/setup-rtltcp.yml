@@ -1,0 +1,94 @@
+# ansible-playbook -v -i ~/ansible/hosts /playbooks/setup-rtltcp.yml
+#
+# wget http://files.js8call.com/1.0.1/js8call_1.0.1_armhf.deb
+# sudo dpkg -i js8....
+#sudo apt --fix-broken install
+#sudo dpkg -i js8...
+---
+- hosts: rtltcp
+  gather_facts: yes
+  vars:
+
+    boot_config_options:
+      - regexp: "^#?dtparam=audio"
+        line: "dtparam=audio=off"
+
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+#    - include: ../tasks/update.yml
+#      tags: update
+
+    - name: Install dependancies from apt
+      become: yes
+      apt:
+        pkg:
+          - libasound2-dev
+          - git-core
+          - dnsutils
+          - gawk
+          - cmake
+          - pkg-config
+          - libusb-1.0-0-dev
+        state: present
+
+    # Get rtl-sdr from osmocom
+    - name: Get rtl-sdr from osmocom
+      git:
+        repo: git://git.osmocom.org/rtl-sdr.git
+        dest: /home/pi/rtl-sdr
+        force: yes
+
+  # Create a folder
+    - name: Creates directory
+      file: path=/home/pi/rtl-sdr/build state=directory
+
+    # make rtl-sdr
+    - name: cmake rtl-sdr
+      command: cmake ../ -DINSTALL_UDEV_RULES=ON
+      args:
+        chdir: "/home/pi/rtl-sdr/build"
+        creates: "/home/pi/rtl-sdr/build/Makefile"
+
+    # make rtl-sdr
+    - name: make rtl-sdr
+      command: make
+      args:
+        chdir: "/home/pi/rtl-sdr/build"
+        creates: "/home/pi/rtl-sdr/build/src/rtl_tcp"
+
+  # run ldconfig
+    - name: run ldconfig
+      become: yes
+      command: ldconfig
+
+    # make install rtl-sd
+    - name: make install rtl-sdr
+      become: yes
+      command: make install
+      args:
+        chdir: "/home/pi/rtl-sdr/build"
+        creates: "/usr/local/bin/rtl_tcp"
+
+    - name: add udev
+      become: yes
+      shell: cp ../rtl-sdr.rules /etc/udev/rules.d/
+      args:
+        creates: "/etc/udev/rules.d/rtl-sdr.rules"
+
+    - name: blacklist
+      become: yes
+      lineinfile:
+        dest:        /etc/modprobe.d/blacklist-rtl.conf
+        line:        '{{ item }}'
+      with_items:
+        - 'blacklist dvb_usb_rtl28xxu'
+        - 'blacklist rtl2832'
+        - 'blacklist rtl2830'
+
+
+  handlers:
+
+    - include: ../handlers/reboot.yml
+      tags: system

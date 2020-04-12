@@ -1,0 +1,58 @@
+# ansible-playbook -v -i ~/ansible/hosts /playbooks/setup-datalog.yml
+---
+- hosts:                  datalog
+  gather_facts:           yes
+  vars:
+
+    boot_config_options:
+      - regexp:           "^#?dtparam=audio"
+        line:             "dtparam=audio=off"
+      - regexp:           "^#?dtparam=spi=on"
+        line:             "dtparam=spi=on"
+
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+#    - include:           ../tasks/update.yml
+#      tags:              update
+
+    - name:               Install dependancies from apt
+      become:             yes
+      apt:
+        pkg:
+          - git-core
+          - dnsutils
+          - gawk
+          - automake
+          - libtool
+          - p7zip-full
+          - python-pip
+          - python-pil
+          - python-dev
+          - mariadb-server
+          - php-mysql
+          - apscheduler
+          - libblas-dev
+          - liblapack-dev
+          - libatlas-base-dev
+          - gfortran
+          - python-setuptools
+          - python-matplotlib
+          - apache2
+        state:              present
+
+
+    - name:               Remove bloatware from apt
+      become:             yes
+      apt:
+        pkg:
+          - wolfram-engine
+          - libreoffice*
+          - libhamlib2
+        state:            absent
+
+  handlers:
+
+    - include:            ../handlers/reboot.yml
+      tags:               system

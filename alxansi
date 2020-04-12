@@ -1,0 +1,80 @@
+#!/bin/bash
+#Routine to check or relink a config file
+
+ANSDIR=/Users/AlexS/ansible/kansible
+PREFIX=/usr/local/sbin
+VERSION="0.0.2 11Jan19"
+version () {
+ msg="Version: $(basename $0) $VERSION"
+ returnmsg
+ exit 0
+}
+returnmsg () {
+  echo $msg
+}
+
+findprof () {
+  local __proftest=$1
+  local proffind=`find $CONFDIR -name m*$1*| xargs -n 1 basename |cut -c2-`
+# handle missing file condition here
+  echo $proffind
+}
+##findcurrent () {
+##mcurr="None"
+##for f in `find $CONFDIR/ -name m*$1*` ; do  if cmp -s /etc/mmdvmhost $f; then  mcurr=`basename $f|cut -c2-`; fi ; done
+#mcurr=`readlink /etc/mmdvmhost | xargs -n 1 basename`
+##}
+
+usage () {
+ echo "Usage: $(basename $0) [ -i|-S|-l|-A hostname| -N hostname| -e jobname |fix tyhis line| -U -O | -D ]"
+ echo ""
+ echo "      -S  update a new raspi SDcard mounted in /Volumes/boot"
+ echo "      -W  update a new raspi SDcard mounted in /Volumes/boot for pizeroW"
+ echo "           configues wifi and usb console"
+ echo "      -h  This help text"
+ #echo "      -l  return current list of profiles"
+ echo "      -U  update known hosts"
+ echo "      -N  Name  New pi"
+ echo "      -e  jobname  run setup-jobname "
+ echo "      -E  jobname  run setup-jobname DEBUG"
+ echo "      -A  Name  Add to ansible"
+ echo "      -v  version"
+ echo ""
+
+ exit 0
+}
+
+#starting
+mand=
+if [ "$1" != "" ]; then
+ overwrite=
+ outinfo=
+ outlist=
+ oswitch=
+ outtest=
+ ocreate=
+ oupdate=
+ updateusers=
+
+ # for future state with multiple options
+ while getopts "A:SWhlvUR:N:T:e:E:" opt ; do
+   case $opt in
+
+     S ) ansible-playbook playbooks/new-sdcard.yml ; exit 0 ;;
+     W ) ansible-playbook -vvv playbooks/new-sdcardW.yml ; exit 0 ;;
+     h ) usage ;;
+     U ) ansible-playbook playbooks/update-default.yml; exit 0 ;;
+     N ) newname="$OPTARG" ; ansible-playbook playbooks/new-default.yml --extra-vars "hostname=$newname" ; exit 0 ;;
+     R ) newname="$OPTARG" ; ansible-playbook -vvv playbooks/new-reboot.yml --extra-vars "hostname=$newname" ; exit 0 ;;
+     T ) newname="$OPTARG" ; ansible-playbook playbooks/test-default.yml --extra-vars "hostname=$newname" ; exit 0 ;;
+     e ) jobname="$OPTARG" ; ansible-playbook -v playbooks/setup-$jobname.yml ; exit 0 ;;
+     E ) jobname="$OPTARG" ; ansible-playbook -vvv playbooks/setup-$jobname.yml ; exit 0 ;;
+     A ) newname="$OPTARG" ; ansible-playbook playbooks/add-default.yml --extra-vars "hostname=$newname" ; exit 0 ;;
+     v ) version ;;
+
+    \? ) echo -e "Invalid option, try -h \"for help\"" ; exit 0 ;;
+   esac
+ done
+ shift $(($OPTIND -1))
+ #  $* is left over
+fi

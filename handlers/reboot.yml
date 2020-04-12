@@ -1,0 +1,4 @@
+- name: reboot
+  become: yes
+  reboot:
+    reboot_timeout: 600

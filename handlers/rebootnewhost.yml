@@ -1,0 +1,14 @@
+- name: reboot
+  command: 'reboot -f'
+  async: 1
+  poll: 0
+  ignore_errors: true
+  become: true
+
+- name: Wait for server to restart
+  wait_for:
+    host={{ hostname }}
+    port=22
+    delay=10
+  become: false
+  delegate_to: localhost

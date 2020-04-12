@@ -1,0 +1,22 @@
+# ansible-playbook -i ~/ansible/hosts /playbooks/update-default.yml
+---
+- hosts: updateservers
+  gather_facts: yes
+  vars:
+    timezone: Australia/Sydney
+
+  tasks:
+
+    # Run apt-get update and apt-get upgrade
+    - include: ../tasks/update.yml
+      tags: update
+      notify:
+        - reboot
+
+  handlers:
+
+    - include: ../handlers/reboot.yml
+      tags: system
+
+    - include: ../handlers/tzdata.yml
+      tags: system

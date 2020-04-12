@@ -1,0 +1,5 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=x11vnc autostart
+Comment=Starts the x11vnc server to allow for remote VNC connections.
+Exec=x11vnc –forever -usepw -display :0 -rfbport 5900

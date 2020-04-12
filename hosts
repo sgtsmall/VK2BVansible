@@ -1,0 +1,39 @@
+[rtltcp]
+pinetomd ansible_host=pinetomd ansible_user=pi ansible_ssh_pass=zzzzzzz host_key_checking=false
+
+[newpi]
+raspberrypi ansible_host=raspberrypi ansible_user=pi ansible_ssh_pass=raspberry host_key_checking=false
+raspberrypi ansible_host=raspberrypi.local ansible_user=pi ansible_ssh_pass=raspberry host_key_checking=false
+
+[direwolf]
+direberry ansible_host=192.168.1.149 host_key_checking=false
+raspiwolf ansible_host=raspiwolf ansible_user=pi ansible_ssh_pass=raspberry host_key_checking=false
+
+[local]
+localhost ansible_connection=local
+
+[addans]
+kingubud ansible_host=kingubud ansible_user=kingubud ansible_ssh_pass=zzzzzzz host_key_checking=false
+
+[hostapd]
+nprslave ansible_host=nprslave.local ansible_user=pi host_key_checking=false
+vk2psfpac host_key_checking=false
+
+[dnsntp]
+wicendns ansible_host=wicendns ansible_user=pi host_key_checking=false
+vk2psfpac host_key_checking=false
+
+[setupdate]
+raspiapc ansible_host=raspiapc ansible_user=pi ansible_ssh_pass=zzzz host_key_checking=false
+
+[updateservers]
+rectest
+steptest
+raspiapc
+pinetomd
+pitv
+issabove ansible_user=pi
+
+[vncservice]
+vk2psfpac ansible_user=pi
+vk2psfdraws ansible_user=pi

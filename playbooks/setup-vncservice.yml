@@ -1,0 +1,50 @@
+---
+- hosts: vncservice
+  gather_facts: yes
+  vars:
+
+    LXDE_options:
+      # Disable HDMI on startup (for power savings).
+      - regexp: "^@x11vnc"
+        line: '@x11vnc -forever -usepw -rfbport 5900'
+
+  tasks:
+
+  # Run apt-get update and apt-get upgrade
+    - include: ../tasks/update.yml
+      tags: update
+
+    - name: Install dependancies from apt
+      become: yes
+      apt:
+        pkg:
+          - x11vnc
+        state: present
+
+# Create a folder
+    - name: install vnc service files
+      become: yes
+      template:
+        src: ../templates/vnc.service
+        dest: /etc/systemd/system/vnc.service
+        mode: u+rx,g+rx,o+rx
+
+#    - name: fix perms
+#      command: x11vnc -storepasswd simple ~/.vnc/passwd
+
+ #   - name: daemon-reload
+ #     systemd:
+ #       daemon_reload: yes
+
+    - name: restart vncservice
+      become: yes
+      systemd:
+        name: vnc
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+  handlers:
+
+    - include: ../handlers/reboot.yml
+      tags: system
